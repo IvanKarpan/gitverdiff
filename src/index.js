@@ -12,7 +12,8 @@ const {
   getGitModifiedFiles,
   getPackageVersion,
   readPatternsFromFile,
-  readPatternsFromPackageJson
+  readPatternsFromPackageJson,
+  sanitizeForFilesystem
 } = require('./utils')
 const { minimatch } = require('minimatch')
 
@@ -103,11 +104,16 @@ function generateVersionHash (options = {}) {
   let commitHash = ''
   let branchName = ''
   if (gitHead.startsWith('ref:')) {
-    const refPath = gitHead.slice(5).trim()
-    branchName = path.basename(refPath)
+    const refPath = gitHead.slice(5).trim() // e.g., "refs/heads/feat/test"
+    const prefix = 'refs/heads/'
+    if (refPath.startsWith(prefix)) {
+      branchName = refPath.slice(prefix.length) // yields "feat/test"
+    } else {
+      branchName = refPath
+    }
     commitHash = fs.readFileSync(path.join(gitRoot, '.git', refPath), 'utf8').trim()
   } else {
-    // Detached HEAD or direct commit.
+  // Detached HEAD or direct commit.
     commitHash = gitHead
   }
   const shortCommit = commitHash.substring(0, 7)
@@ -144,7 +150,7 @@ function generateVersionHash (options = {}) {
   format.forEach(token => {
     switch (token) {
       case 'package-version':
-        if (packageVersion) tokens.push(packageVersion)
+        if (packageVersion) tokens.push(`v${packageVersion}`)
         break
       case 'branch':
         if (branchName) tokens.push(branchName)
@@ -162,6 +168,7 @@ function generateVersionHash (options = {}) {
         throw new Error(`Unknown token: ${token}`)
     }
   })
+  const sanisanitizedTokens = tokens.map(sanitizeForFilesystem)
 
   // Step 11: Determine the separator.
   let separator = options.separator
@@ -187,7 +194,7 @@ function generateVersionHash (options = {}) {
   if (!separator) separator = '-'
 
   // Step 12: Join tokens using the chosen separator.
-  return tokens.join(separator)
+  return sanisanitizedTokens.join(separator)
 }
 
 module.exports = { generateVersionHash }

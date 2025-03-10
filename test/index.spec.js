@@ -61,7 +61,7 @@ describe('generateVersionHash', () => {
     //   package-version: "1.2.3"
     //   branch: "main"
     //   short-commit-sha: first 7 characters of dummyCommit = 'abcdef1'
-    expect(hash).toBe('1.2.3|main|abcdef1')
+    expect(hash).toBe('v1.2.3|main|abcdef1')
   })
 
   test('generates version hash including diff-hash when modifications exist', () => {
@@ -81,7 +81,7 @@ describe('generateVersionHash', () => {
     // The diff-hash token should be a 64-character hex string.
     const parts = hash.split('|')
     expect(parts.length).toBe(4)
-    expect(parts[0]).toBe('1.2.3')
+    expect(parts[0]).toBe('v1.2.3')
     expect(parts[1]).toBe('main')
     expect(parts[2]).toBe('abcdef1')
     expect(parts[3]).toMatch(/^[a-f0-9]{64}$/)
@@ -158,7 +158,7 @@ describe('generateVersionHash', () => {
       .digest('hex')
     // Expect tokens: package-version from subDir ("9.9.9"), branch ("main" inherited from Git root),
     // short-commit-sha from dummy commit = 'abcdef1', and diff-hash.
-    expect(hash).toBe(`9.9.9@main@abcdef1@${diffHash}`)
+    expect(hash).toBe(`v9.9.9@main@abcdef1@${diffHash}`)
   })
 
   test('falls back to Git root configuration when packageRoot has no config', () => {
@@ -172,7 +172,7 @@ describe('generateVersionHash', () => {
       format: 'package-version,branch,short-commit-sha'
       // Not providing separator, so should fall back to package.json in Git root, which is '|'
     })
-    expect(hash).toBe('1.2.3|main|abcdef1')
+    expect(hash).toBe('v1.2.3|main|abcdef1')
   })
 
   test('separator override: uses default "-" when not provided in package.json or options', () => {
@@ -218,20 +218,18 @@ describe('generateVersionHash', () => {
     // Expect that branch token is omitted because HEAD is detached.
     // So the tokens should be: package-version and short-commit-sha.
     // short-commit-sha is first 7 characters of detachedCommit.
-    expect(hash).toBe(`1.2.3|${detachedCommit.substring(0, 7)}`)
+    expect(hash).toBe(`v1.2.3|${detachedCommit.substring(0, 7)}`)
   })
 
-  test('handles non-main branch scenario', () => {
-    // Simulate HEAD pointing to a non-main branch.
+  test('handles non-main branch scenario (simple branch name)', () => {
     const gitDir = path.join(tempDir, '.git')
-    // Change HEAD to point to 'ref: refs/heads/feature/test'
-    fs.writeFileSync(path.join(gitDir, 'HEAD'), 'ref: refs/heads/feature/test')
-    // Create necessary directories for the branch ref.
-    const refsFeatureDir = path.join(gitDir, 'refs', 'heads', 'feature')
-    fs.mkdirSync(refsFeatureDir, { recursive: true })
-    // Write a dummy commit hash for the feature branch.
-    const featureCommit = 'fedcba9876543210fedcba9876543210fedcba98'
-    fs.writeFileSync(path.join(refsFeatureDir, 'test'), featureCommit)
+    // Simulate HEAD pointing to a branch "refs/heads/test"
+    fs.writeFileSync(path.join(gitDir, 'HEAD'), 'ref: refs/heads/test')
+    // Create the refs folder and test branch ref with a dummy commit hash.
+    const refsHeadsDir = path.join(gitDir, 'refs', 'heads')
+    // No additional subdirectory needed if branch is just "test"
+    const testCommit = 'fedcba9876543210fedcba9876543210fedcba98'
+    fs.writeFileSync(path.join(refsHeadsDir, 'test'), testCommit)
     childProcess.execSync.mockReturnValue('')
     // Use a format that includes branch and short-commit-sha.
     const hash = generateVersionHash({
@@ -239,8 +237,26 @@ describe('generateVersionHash', () => {
       format: 'branch,short-commit-sha',
       separator: '-'
     })
-    // Expect branch to be the basename of 'refs/heads/feature/test', which is 'test'
-    // and short-commit-sha to be first 7 characters of featureCommit.
-    expect(hash).toBe(`test-${featureCommit.substring(0, 7)}`)
+    // Expect branch token to be "test" and short commit to be first 7 characters of testCommit.
+    expect(hash).toBe(`test-${testCommit.substring(0, 7)}`)
+  })
+
+  test('handles complex branch name scenario', () => {
+    // Simulate a complex branch name "feat/test"
+    const gitDir = path.join(tempDir, '.git')
+    fs.writeFileSync(path.join(gitDir, 'HEAD'), 'ref: refs/heads/feat/test')
+    // Create necessary directories for the branch ref.
+    const refsFeatDir = path.join(gitDir, 'refs', 'heads', 'feat')
+    fs.mkdirSync(refsFeatDir, { recursive: true })
+    const complexCommit = '11223344556677889900aabbccddeeff00112233'
+    fs.writeFileSync(path.join(refsFeatDir, 'test'), complexCommit)
+    childProcess.execSync.mockReturnValue('')
+    const hash = generateVersionHash({
+      packageRoot: tempDir,
+      format: 'branch,short-commit-sha',
+      separator: '-'
+    })
+    // Expect the branch token to be "feat/test" and short commit to be first 7 characters of complexCommit.
+    expect(hash).toBe(`feat:test-${complexCommit.substring(0, 7)}`)
   })
 })

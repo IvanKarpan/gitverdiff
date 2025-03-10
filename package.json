@@ -1,6 +1,6 @@
 {
   "name": "gitverdiff",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "CLI tool and Node.js library for generating version hashes based on your Git repository's state and file modifications, helps with cache busting and versioning by producing unique identifiers (hashes) that can be embedded in filenames",
   "keywords": [
     "git",
@@ -28,7 +28,7 @@
     "fix": "pnpm lint --fix",
     "lint": "standard",
     "release": "pnpm publish",
-    "test": "echo \"No tests specified yet.\" && exit 1"
+    "test": "jest"
   },
   "dependencies": {
     "minimatch": "^10.0.1"

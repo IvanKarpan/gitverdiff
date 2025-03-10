@@ -96,10 +96,15 @@ function readPatternsFromPackageJson (field, packageRoot) {
   return []
 }
 
+function sanitizeForFilesystem (token) {
+  return token.replace(/[^a-zA-Z0-9-_.]/g, ':')
+}
+
 module.exports = {
   findGitRoot,
   getGitModifiedFiles,
   getPackageVersion,
   readPatternsFromFile,
-  readPatternsFromPackageJson
+  readPatternsFromPackageJson,
+  sanitizeForFilesystem
 }

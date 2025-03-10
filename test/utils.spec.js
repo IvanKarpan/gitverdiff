@@ -3,16 +3,17 @@
 'use strict'
 
 const childProcess = require('child_process')
-const fs = require('fs')
-const os = require('os')
-const path = require('path')
 const {
   findGitRoot,
   getGitModifiedFiles,
   getPackageVersion,
   readPatternsFromFile,
-  readPatternsFromPackageJson
+  readPatternsFromPackageJson,
+  sanitizeForFilesystem
 } = require('../src/utils')
+const fs = require('fs')
+const os = require('os')
+const path = require('path')
 
 describe('Utils functions', () => {
   let tempDir
@@ -114,6 +115,25 @@ describe('Utils functions', () => {
     test('should return empty array if package.json does not exist', () => {
       const patterns = readPatternsFromPackageJson('include', tempDir)
       expect(patterns).toEqual([])
+    })
+  })
+
+  describe('sanitizeForFilesystem', () => {
+    test('should leave safe characters unchanged', () => {
+      expect(sanitizeForFilesystem('foo-bar_baz.txt')).toBe('foo-bar_baz.txt')
+    })
+
+    test('should replace unsafe characters with colon', () => {
+      // The slash (/) is unsafe and should be replaced with a colon.
+      expect(sanitizeForFilesystem('feat/test')).toBe('feat:test')
+    })
+
+    test('should handle multiple unsafe characters', () => {
+      expect(sanitizeForFilesystem('a/b\\c*d?e"f<g>h|i')).toBe('a:b:c:d:e:f:g:h:i')
+    })
+
+    test('should return an empty string for empty input', () => {
+      expect(sanitizeForFilesystem('')).toBe('')
     })
   })
 })
