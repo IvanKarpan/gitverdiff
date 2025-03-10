@@ -2,12 +2,12 @@
 
 'use strict'
 
-const childProcess = require('child_process')
-const crypto = require('crypto')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
+const crypto = require('crypto')
 const { generateVersionHash } = require('../src/index.js')
+const childProcess = require('child_process')
 
 // Mock execSync so that we can simulate Git output without requiring an actual repository.
 jest.mock('child_process', () => ({
@@ -58,9 +58,9 @@ describe('generateVersionHash', () => {
     childProcess.execSync.mockReturnValue('')
     const hash = generateVersionHash({ packageRoot: tempDir })
     // Expected tokens:
-    //   package-version: "1.2.3"
-    //   branch: "main"
-    //   short-commit-sha: first 7 characters of dummyCommit = 'abcdef1'
+    //   package-version: "v1.2.3" (with a "v" prefix added by our implementation),
+    //   branch: "main",
+    //   short-commit-sha: first 7 characters of dummyCommit = "abcdef1"
     expect(hash).toBe('v1.2.3|main|abcdef1')
   })
 
@@ -134,7 +134,7 @@ describe('generateVersionHash', () => {
       version: '9.9.9',
       gitverdiff: {
         separator: '@',
-        format: 'package-version,branch,short-commit-sha',
+        format: 'package-version,branch,short-commit-sha,diff-hash',
         include: ['custom.js'],
         ignore: []
       }
@@ -142,8 +142,9 @@ describe('generateVersionHash', () => {
     fs.writeFileSync(path.join(subDir, 'package.json'), JSON.stringify(subPkg, null, 2))
     // Create a dummy file that matches the subDir config.
     fs.writeFileSync(path.join(subDir, 'custom.js'), 'custom content')
-    // Simulate modified file from git.
-    childProcess.execSync.mockReturnValue('custom.js\nother.js')
+    // Simulate modified files from Git with paths relative to Git root.
+    // Since the file is in subDir, its Git root relative path is "packages/my-package/custom.js"
+    childProcess.execSync.mockReturnValue('packages/my-package/custom.js\nother.js')
     // Also create the 'other.js' file at the monorepo level.
     fs.writeFileSync(path.join(tempDir, 'other.js'), 'other content')
     // Use subDir as packageRoot.
@@ -152,12 +153,15 @@ describe('generateVersionHash', () => {
       format: 'package-version,branch,short-commit-sha,diff-hash',
       separator: '@'
     })
-    // Since include patterns in subDir config only include 'custom.js', diff-hash should be computed from 'custom content'.
+    // Diff hash should be computed from the content of the file included by the subDir config:
     const diffHash = crypto.createHash('sha256')
       .update('custom content')
       .digest('hex')
-    // Expect tokens: package-version from subDir ("9.9.9"), branch ("main" inherited from Git root),
-    // short-commit-sha from dummy commit = 'abcdef1', and diff-hash.
+    // Expected tokens:
+    //   package-version from subDir: "v9.9.9",
+    //   branch: "main" (inherited from Git root),
+    //   short-commit-sha: "abcdef1" (from dummyCommit),
+    //   diff-hash: computed from 'custom content'
     expect(hash).toBe(`v9.9.9@main@abcdef1@${diffHash}`)
   })
 
@@ -258,5 +262,44 @@ describe('generateVersionHash', () => {
     })
     // Expect the branch token to be "feat/test" and short commit to be first 7 characters of complexCommit.
     expect(hash).toBe(`feat:test-${complexCommit.substring(0, 7)}`)
+  })
+
+  test('monorepo simulation: includes files from outside package folder', () => {
+    // Create a subdirectory for the package.
+    const subDir = path.join(tempDir, 'packages', 'my-package')
+    fs.mkdirSync(subDir, { recursive: true })
+    // Create a file in a shared directory (outside the package folder).
+    const sharedDir = path.join(tempDir, 'shared')
+    fs.mkdirSync(sharedDir)
+    fs.writeFileSync(path.join(sharedDir, 'sharedFile.js'), 'shared content')
+    // Simulate Git output: file path relative to Git root.
+    childProcess.execSync.mockReturnValue('shared/sharedFile.js')
+    // Use an include pattern that covers the shared directory relative to the package.
+    const hash = generateVersionHash({
+      packageRoot: subDir,
+      include: ['../../shared/**'],
+      format: 'diff-hash',
+      separator: '|'
+    })
+    const expectedDiffHash = crypto.createHash('sha256')
+      .update('shared content')
+      .digest('hex')
+    expect(hash).toBe(expectedDiffHash)
+  })
+
+  test('separator override: uses default "-" when not provided in package.json or options', () => {
+    const pkg = {
+      version: '1.2.3',
+      gitverdiff: {
+        format: 'branch,short-commit-sha'
+      }
+    }
+    fs.writeFileSync(path.join(tempDir, 'package.json'), JSON.stringify(pkg, null, 2))
+    childProcess.execSync.mockReturnValue('')
+    const hash = generateVersionHash({
+      packageRoot: tempDir,
+      format: 'branch,short-commit-sha'
+    })
+    expect(hash).toBe('main-abcdef1')
   })
 })

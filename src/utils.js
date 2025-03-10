@@ -36,11 +36,11 @@ function findGitRoot (startDir) {
  *
  * @returns {string[]} An array of file paths that Git considers modified.
  */
-function getGitModifiedFiles () {
+function getGitModifiedFiles (cwd) {
   try {
     const output = childProcess.execSync(
       'git ls-files -m -o --exclude-standard',
-      { encoding: 'utf8' }
+      { cwd, encoding: 'utf8' }
     )
     return output.split('\n').filter(Boolean)
   } catch (err) {

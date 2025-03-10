@@ -32,14 +32,9 @@ const { minimatch } = require('minimatch')
 function generateVersionHash (options = {}) {
   // Use provided packageRoot or current working directory.
   const packageRoot = options.packageRoot || process.cwd()
-  // Determine the Git root by scanning upward from packageRoot.
-  const gitRoot = findGitRoot(packageRoot)
 
-  // Helper: try to read a field from package.json in a given root.
-  const readField = (field, root) => {
-    const fromJson = readPatternsFromPackageJson(field, root)
-    return fromJson.length ? fromJson : null
-  }
+  // Step 1: Determine the Git root by scanning upward from packageRoot.
+  const gitRoot = findGitRoot(packageRoot)
 
   // Step 2: Determine include patterns.
   let includePatterns = options.include || []
@@ -77,12 +72,15 @@ function generateVersionHash (options = {}) {
   // If still empty, leave it as an empty array.
 
   // Step 4: Retrieve modified files from Git.
-  const gitModifiedFiles = getGitModifiedFiles()
+  const gitModifiedFiles = getGitModifiedFiles(gitRoot)
 
-  // Step 5: Filter files by include/ignore patterns.
+  // Step 5: Filter files by converting each file path (resolved from gitRoot) to a path relative to packageRoot,
+  // then applying the include/ignore patterns on that relative path.
   const files = gitModifiedFiles.filter(filePath => {
-    const isIncluded = includePatterns.some(pattern => minimatch(filePath, pattern))
-    const isIgnored = ignorePatterns.some(pattern => minimatch(filePath, pattern))
+    const absolutePath = path.resolve(gitRoot, filePath)
+    const relativePath = path.relative(packageRoot, absolutePath)
+    const isIncluded = includePatterns.some(pattern => minimatch(relativePath, pattern))
+    const isIgnored = ignorePatterns.some(pattern => minimatch(relativePath, pattern))
     return isIncluded && !isIgnored
   }).sort()
 
