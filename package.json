@@ -1,0 +1,45 @@
+{
+  "name": "gitverdiff",
+  "version": "1.0.0",
+  "description": "CLI tool and Node.js library for generating version hashes based on your Git repository's state and file modifications, helps with cache busting and versioning by producing unique identifiers (hashes) that can be embedded in filenames",
+  "keywords": [
+    "git",
+    "versioning",
+    "hash",
+    "cli",
+    "cache-busting",
+    "build-tool"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/IvanKarpan/gitverdiff.git"
+  },
+  "license": "Apache-2.0",
+  "author": "Ivan Karpan <github@ivankarpan.com>",
+  "contributors": [
+    "ChatGPT <chatgpt@openai.com>"
+  ],
+  "main": "src/index.js",
+  "bin": {
+    "gitverdiff": "./bin/gitverdiff.js"
+  },
+  "scripts": {
+    "build": "node index.js",
+    "fix": "pnpm lint --fix",
+    "lint": "standard",
+    "release": "pnpm publish",
+    "test": "echo \"No tests specified yet.\" && exit 1"
+  },
+  "dependencies": {
+    "minimatch": "^10.0.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "standard": "^17.1.2"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}
