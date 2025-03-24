@@ -31,18 +31,31 @@ function findGitRoot (startDir) {
 }
 
 /**
- * Retrieves modified files recognized by Git, including untracked files.
+ * Retrieves modified files recognized by Git, including untracked and deleted files.
  * Assumes the current working directory is within a Git repository.
  *
  * @returns {string[]} An array of file paths that Git considers modified.
  */
 function getGitModifiedFiles (cwd) {
   try {
-    const output = childProcess.execSync(
+    // First get the list of modified and untracked files
+    const lsFilesOutput = childProcess.execSync(
       'git ls-files -m -o --exclude-standard',
       { cwd, encoding: 'utf8' }
     )
-    return output.split('\n').filter(Boolean)
+    const files = lsFilesOutput.split('\n').filter(Boolean)
+
+    // Then get the status to identify deleted files
+    const statusOutput = childProcess.execSync(
+      'git status --porcelain',
+      { cwd, encoding: 'utf8' }
+    )
+    const deletedFiles = statusOutput.split('\n')
+      .filter(line => line.startsWith(' D '))
+      .map(line => line.slice(3))
+
+    // Combine both lists, ensuring no duplicates
+    return [...new Set([...files, ...deletedFiles])]
   } catch (err) {
     console.error('Error retrieving modified files from Git:', err)
     return []
@@ -58,8 +71,13 @@ function getGitModifiedFiles (cwd) {
 function getPackageVersion (packageRoot) {
   const packageJsonPath = path.resolve(packageRoot, 'package.json')
   if (fs.existsSync(packageJsonPath)) {
-    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
-    return packageJson.version || ''
+    try {
+      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
+      return packageJson.version || ''
+    } catch (error) {
+      // If package.json is invalid, return empty string
+      return ''
+    }
   }
   return ''
 }
@@ -88,10 +106,15 @@ function readPatternsFromFile (filePath, packageRoot) {
 function readPatternsFromPackageJson (field, packageRoot) {
   const packageJsonPath = path.resolve(packageRoot, 'package.json')
   if (fs.existsSync(packageJsonPath)) {
-    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
-    return packageJson.gitverdiff && packageJson.gitverdiff[field]
-      ? packageJson.gitverdiff[field]
-      : []
+    try {
+      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
+      return packageJson.gitverdiff && packageJson.gitverdiff[field]
+        ? packageJson.gitverdiff[field]
+        : []
+    } catch (error) {
+      // If package.json is invalid, return empty array
+      return []
+    }
   }
   return []
 }

@@ -7,6 +7,12 @@
 'use strict'
 
 const { generateVersionHash } = require('../src/index.js')
+const fs = require('fs')
+const path = require('path')
+
+// Read package version from package.json
+const packageJsonPath = path.join(__dirname, '..', 'package.json')
+const packageVersion = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')).version
 
 // Provide help text for the available format tokens
 const FORMAT_TOKENS_HELP = `
@@ -30,12 +36,19 @@ Options:
   --format <tokens>       Comma-separated list of format tokens to compose the version hash.
                           ${FORMAT_TOKENS_HELP.trim().split('\n').join('\n                          ')}
   --separator <sep>       Separator string used to join tokens (default: '-').
-  --help                  Show this help message.
+  --help                 Show this help message.
+  --version             Show version number.
 `
 
 // If --help is passed, print help and exit
 if (process.argv.includes('--help')) {
   console.log(HELP_TEXT)
+  process.exit(0)
+}
+
+// If --version is passed, print version and exit
+if (process.argv.includes('--version')) {
+  console.log(`v${packageVersion}`)
   process.exit(0)
 }
 

@@ -92,8 +92,14 @@ function generateVersionHash (options = {}) {
     if (!fs.existsSync(absolutePath)) {
       absolutePath = path.resolve(gitRoot, filePath)
     }
-    const data = fs.readFileSync(absolutePath)
-    hash.update(data)
+    // If the file doesn't exist in either location, it's deleted
+    // Include the deletion in the hash by hashing a special marker with the file path
+    if (!fs.existsSync(absolutePath)) {
+      hash.update(`DELETED:${filePath}`)
+    } else {
+      const data = fs.readFileSync(absolutePath)
+      hash.update(data)
+    }
   }
   const sourceHash = hash.digest('hex')
 
@@ -118,7 +124,6 @@ function generateVersionHash (options = {}) {
 
   // Step 8: Check if there are modifications.
   const emptyHash = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
-  const modificationsExist = sourceHash !== emptyHash
 
   // Step 9: Determine format tokens.
   let format = options.format
@@ -160,7 +165,10 @@ function generateVersionHash (options = {}) {
         tokens.push(commitHash)
         break
       case 'diff-hash':
-        if (modificationsExist) tokens.push(sourceHash)
+        // Only include diff-hash if there are actual modifications
+        if (sourceHash !== emptyHash) {
+          tokens.push(sourceHash)
+        }
         break
       default:
         throw new Error(`Unknown token: ${token}`)
@@ -174,18 +182,26 @@ function generateVersionHash (options = {}) {
     // Try packageRoot first.
     const pkgPath = path.join(packageRoot, 'package.json')
     if (fs.existsSync(pkgPath)) {
-      const pkgJson = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
-      if (pkgJson.gitverdiff && pkgJson.gitverdiff.separator) {
-        separator = pkgJson.gitverdiff.separator
+      try {
+        const pkgJson = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+        if (pkgJson.gitverdiff && pkgJson.gitverdiff.separator) {
+          separator = pkgJson.gitverdiff.separator
+        }
+      } catch (error) {
+        // If package.json is invalid, continue with default separator
       }
     }
   }
   if (!separator && packageRoot !== gitRoot) {
     const pkgPath = path.join(gitRoot, 'package.json')
     if (fs.existsSync(pkgPath)) {
-      const pkgJson = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
-      if (pkgJson.gitverdiff && pkgJson.gitverdiff.separator) {
-        separator = pkgJson.gitverdiff.separator
+      try {
+        const pkgJson = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+        if (pkgJson.gitverdiff && pkgJson.gitverdiff.separator) {
+          separator = pkgJson.gitverdiff.separator
+        }
+      } catch (error) {
+        // If package.json is invalid, continue with default separator
       }
     }
   }

@@ -64,6 +64,17 @@ describe('generateVersionHash', () => {
     expect(hash).toBe('v1.2.3|main|abcdef1')
   })
 
+  test('generates version hash with default tokens and no modifications (no diff-hash)', () => {
+    // Simulate no modified files: execSync returns empty string.
+    childProcess.execSync.mockReturnValue('')
+    const hash = generateVersionHash({
+      packageRoot: tempDir,
+      format: 'package-version,branch,short-commit-sha,diff-hash'
+    })
+    // When there are no modifications, diff-hash should not be included
+    expect(hash).toBe('v1.2.3|main|abcdef1')
+  })
+
   test('generates version hash including diff-hash when modifications exist', () => {
     // Simulate modified files: execSync returns file paths.
     childProcess.execSync.mockReturnValue('file1.js\nfile2.js')
@@ -301,5 +312,244 @@ describe('generateVersionHash', () => {
       format: 'branch,short-commit-sha'
     })
     expect(hash).toBe('main-abcdef1')
+  })
+
+  test('handles deleted file scenario', () => {
+    // When a file is deleted:
+    // 1. git ls-files -m -o --exclude-standard doesn't list it
+    // 2. git status --porcelain shows it with "D" prefix
+    childProcess.execSync.mockImplementation((cmd, options) => {
+      if (cmd === 'git ls-files -m -o --exclude-standard') {
+        return ''
+      } else if (cmd === 'git status --porcelain') {
+        return ' D file.txt\n'
+      }
+      return ''
+    })
+
+    // Create a package.json that includes *.txt files
+    const pkg = {
+      version: '1.2.3',
+      gitverdiff: {
+        separator: '|',
+        format: 'package-version,branch,short-commit-sha,diff-hash',
+        include: ['*.txt'],
+        ignore: []
+      }
+    }
+    fs.writeFileSync(path.join(tempDir, 'package.json'), JSON.stringify(pkg, null, 2))
+
+    // We don't create the file at all, simulating a deleted state
+    // The implementation should handle this gracefully and include the deletion in the hash
+
+    const hash = generateVersionHash({
+      packageRoot: tempDir,
+      format: 'package-version,branch,short-commit-sha,diff-hash',
+      separator: '|'
+    })
+
+    // The hash should include the deleted file
+    // We can verify this by checking that the hash is different from the empty hash
+    const parts = hash.split('|')
+    expect(parts.length).toBe(4) // Should have all tokens
+    expect(parts[3]).not.toBe('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855') // Should not be empty hash
+  })
+
+  test('handles untracked files scenario', () => {
+    // Simulate untracked files: git ls-files returns them with "??" prefix
+    childProcess.execSync.mockImplementation((cmd, options) => {
+      if (cmd === 'git ls-files -m -o --exclude-standard') {
+        return 'newfile.txt\n'
+      } else if (cmd === 'git status --porcelain') {
+        return '?? newfile.txt\n'
+      }
+      return ''
+    })
+
+    // Create a package.json that includes *.txt files
+    const pkg = {
+      version: '1.2.3',
+      gitverdiff: {
+        separator: '|',
+        format: 'package-version,branch,short-commit-sha,diff-hash',
+        include: ['*.txt'],
+        ignore: []
+      }
+    }
+    fs.writeFileSync(path.join(tempDir, 'package.json'), JSON.stringify(pkg, null, 2))
+
+    // Create the untracked file
+    fs.writeFileSync(path.join(tempDir, 'newfile.txt'), 'new content')
+
+    const hash = generateVersionHash({
+      packageRoot: tempDir,
+      format: 'package-version,branch,short-commit-sha,diff-hash',
+      separator: '|'
+    })
+
+    const parts = hash.split('|')
+    expect(parts.length).toBe(4)
+    expect(parts[3]).not.toBe('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')
+  })
+
+  test('handles multiple deleted files scenario', () => {
+    childProcess.execSync.mockImplementation((cmd, options) => {
+      if (cmd === 'git ls-files -m -o --exclude-standard') {
+        return ''
+      } else if (cmd === 'git status --porcelain') {
+        return ' D file1.txt\n D file2.txt\n'
+      }
+      return ''
+    })
+
+    const pkg = {
+      version: '1.2.3',
+      gitverdiff: {
+        separator: '|',
+        format: 'package-version,branch,short-commit-sha,diff-hash',
+        include: ['*.txt'],
+        ignore: []
+      }
+    }
+    fs.writeFileSync(path.join(tempDir, 'package.json'), JSON.stringify(pkg, null, 2))
+
+    const hash = generateVersionHash({
+      packageRoot: tempDir,
+      format: 'package-version,branch,short-commit-sha,diff-hash',
+      separator: '|'
+    })
+
+    const parts = hash.split('|')
+    expect(parts.length).toBe(4)
+    expect(parts[3]).not.toBe('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')
+  })
+
+  test('handles mixed modifications scenario', () => {
+    childProcess.execSync.mockImplementation((cmd, options) => {
+      if (cmd === 'git ls-files -m -o --exclude-standard') {
+        return 'modified.txt\n'
+      } else if (cmd === 'git status --porcelain') {
+        return ' M modified.txt\n D deleted.txt\n'
+      }
+      return ''
+    })
+
+    const pkg = {
+      version: '1.2.3',
+      gitverdiff: {
+        separator: '|',
+        format: 'package-version,branch,short-commit-sha,diff-hash',
+        include: ['*.txt'],
+        ignore: []
+      }
+    }
+    fs.writeFileSync(path.join(tempDir, 'package.json'), JSON.stringify(pkg, null, 2))
+
+    // Create the modified file
+    fs.writeFileSync(path.join(tempDir, 'modified.txt'), 'modified content')
+
+    const hash = generateVersionHash({
+      packageRoot: tempDir,
+      format: 'package-version,branch,short-commit-sha,diff-hash',
+      separator: '|'
+    })
+
+    const parts = hash.split('|')
+    expect(parts.length).toBe(4)
+    expect(parts[3]).not.toBe('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')
+  })
+
+  test('handles empty package.json scenario', () => {
+    // Create an empty package.json
+    fs.writeFileSync(path.join(tempDir, 'package.json'), '{}')
+    childProcess.execSync.mockReturnValue('')
+
+    const hash = generateVersionHash({
+      packageRoot: tempDir,
+      format: 'package-version,branch,short-commit-sha'
+    })
+
+    // Should fall back to default format without package version
+    expect(hash).toBe('main-abcdef1')
+  })
+
+  test('handles invalid package.json scenario', () => {
+    // Create an invalid package.json
+    fs.writeFileSync(path.join(tempDir, 'package.json'), '{invalid json}')
+    childProcess.execSync.mockReturnValue('')
+
+    const hash = generateVersionHash({
+      packageRoot: tempDir,
+      format: 'package-version,branch,short-commit-sha'
+    })
+
+    // Should fall back to default format without package version
+    expect(hash).toBe('main-abcdef1')
+  })
+
+  test('handles invalid .gitverdiff file scenario', () => {
+    // Create an invalid .gitverdiff file
+    fs.writeFileSync(path.join(tempDir, '.gitverdiff'), '{invalid json}')
+    childProcess.execSync.mockReturnValue('')
+
+    const hash = generateVersionHash({
+      packageRoot: tempDir,
+      format: 'package-version,branch,short-commit-sha'
+    })
+
+    // Should fall back to default format
+    expect(hash).toBe('v1.2.3|main|abcdef1')
+  })
+
+  test('handles invalid .gitverdiffignore file scenario', () => {
+    // Create an invalid .gitverdiffignore file
+    fs.writeFileSync(path.join(tempDir, '.gitverdiffignore'), '{invalid json}')
+    childProcess.execSync.mockReturnValue('')
+
+    const hash = generateVersionHash({
+      packageRoot: tempDir,
+      format: 'package-version,branch,short-commit-sha'
+    })
+
+    // Should fall back to default format
+    expect(hash).toBe('v1.2.3|main|abcdef1')
+  })
+
+  test('handles branch name with special characters', () => {
+    const gitDir = path.join(tempDir, '.git')
+    // Simulate a branch name with special characters
+    fs.writeFileSync(path.join(gitDir, 'HEAD'), 'ref: refs/heads/feature@123')
+    const refsHeadsDir = path.join(gitDir, 'refs', 'heads')
+    const specialCommit = '11223344556677889900aabbccddeeff00112233'
+    fs.writeFileSync(path.join(refsHeadsDir, 'feature@123'), specialCommit)
+    childProcess.execSync.mockReturnValue('')
+
+    const hash = generateVersionHash({
+      packageRoot: tempDir,
+      format: 'branch,short-commit-sha',
+      separator: '-'
+    })
+
+    // Special characters should be sanitized
+    expect(hash).toBe('feature:123-1122334')
+  })
+
+  test('handles branch name with spaces', () => {
+    const gitDir = path.join(tempDir, '.git')
+    // Simulate a branch name with spaces
+    fs.writeFileSync(path.join(gitDir, 'HEAD'), 'ref: refs/heads/feature 123')
+    const refsHeadsDir = path.join(gitDir, 'refs', 'heads')
+    const spaceCommit = '11223344556677889900aabbccddeeff00112233'
+    fs.writeFileSync(path.join(refsHeadsDir, 'feature 123'), spaceCommit)
+    childProcess.execSync.mockReturnValue('')
+
+    const hash = generateVersionHash({
+      packageRoot: tempDir,
+      format: 'branch,short-commit-sha',
+      separator: '-'
+    })
+
+    // Spaces should be sanitized
+    expect(hash).toBe('feature:123-1122334')
   })
 })

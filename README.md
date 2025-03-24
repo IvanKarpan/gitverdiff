@@ -135,4 +135,5 @@ Ivan Karpan
 
 ## Contributors
 
-ChatGPT
+Claude
+GPT
